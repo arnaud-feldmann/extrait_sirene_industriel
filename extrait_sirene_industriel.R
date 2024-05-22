@@ -4,7 +4,10 @@ library(dplyr)
 library(readxl)
 library(stringr)
 
-etabs <- file.path(tempdir(),"StockEtablissement_utf8.zip")
+temp_dir <- tempdir()
+etabs <- file.path(temp_dir,"StockEtablissement_utf8.zip")
+ent <- file.path(temp_dir,"StockUniteLegale_utf8.zip")
+
 # Sirene stock etab (https://www.data.gouv.fr/fr/datasets/base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/)
 download.file("https://www.data.gouv.fr/fr/datasets/r/0651fb76-bcf3-4f6a-a38d-bc04fa708576",
               etabs,
@@ -13,13 +16,20 @@ download.file("https://www.data.gouv.fr/fr/datasets/r/0651fb76-bcf3-4f6a-a38d-bc
 unzip(etabs,
       exdir = here("input"))
 
+download.file("https://www.data.gouv.fr/fr/datasets/r/825f4199-cadd-486c-ac46-a65a8ea1a047",
+              ent,
+              method = "wget",
+              quiet = TRUE)
+unzip(ent,
+      exdir = here("input"))
+
 download.file("https://www.insee.fr/fr/statistiques/fichier/2120875/naf2008_liste_n5.xls",
               here("input", "naf2008_liste_n5.xls"),
               method = "wget",
               quiet = TRUE)
 
 activites_industrielles <-
-  tribble(~activitePrincipaleEtablissement, ~activitePrincipaleEtablissementLabel,
+  tribble(~activitePrincipaleUniteLegale, ~activitePrincipaleUniteLegaleLabel,
           "18.13Z", "Activités de pré-presse",
           "18.12Z", "Autre imprimerie (labeur)",
           "10.71C", "Boulangerie et boulangerie-pâtisserie",
@@ -55,22 +65,35 @@ activites_industrielles <-
           "10.11Z", "Transformation et conservation de la viande de boucherie") %>%
   union_all(here("input", "naf2008_liste_n5.xls") %>%
               read_xls(skip = 2L) %>%
-              rename(activitePrincipaleEtablissement = Code,
-                     activitePrincipaleEtablissementLabel = Libellé) %>%
-              filter(str_sub(activitePrincipaleEtablissement, 1L, 2L) >= "10" &
-                       str_sub(activitePrincipaleEtablissement, 1L, 2L) <= "33")) %>%
+              rename(activitePrincipaleUniteLegale = Code,
+                     activitePrincipaleUniteLegaleLabel = Libellé) %>%
+              filter(str_sub(activitePrincipaleUniteLegale, 1L, 2L) >= "10" &
+                       str_sub(activitePrincipaleUniteLegale, 1L, 2L) <= "33")) %>%
   as_arrow_table()
 
 tranches_concernees <-
   tribble(
-    ~trancheEffectifsEtablissement, ~trancheEffectifsEtablissementLabel,
+    ~trancheEffectifsUniteLegale, ~trancheEffectifsUniteLegaleLabel,
     "21", "50 à 99 salariés",
     "22", "100 à 199 salariés",
     "31", "200 à 249 salariés",
     "32", "250 à 499 salariés"
   )
 
-sirene <-
+sirene_ent <-
+  here("input", "StockUniteLegale_utf8.csv") %>%
+  read_csv_arrow(col_select =  c("siren", "trancheEffectifsUniteLegale", "activitePrincipaleUniteLegale", "etatAdministratifUniteLegale"),
+                 col_types =  schema(siren = string(),
+                                     trancheEffectifsUniteLegale = string(),
+                                     activitePrincipaleUniteLegale = string(),
+                                     etatAdministratifUniteLegale = string()),
+                 as_data_frame = FALSE) %>%
+  filter(is.na(etatAdministratifUniteLegale) | etatAdministratifUniteLegale == "A") %>%
+  select(-activitePrincipaleUniteLegale) %>%
+  inner_join(tranches_concernees, by = "trancheEffectifsUniteLegale") %>%
+  inner_join(activites_industrielles, by = "activitePrincipaleUniteLegale")
+
+sirene_etab <-
   here("input", "StockEtablissement_utf8.csv") %>%
   read_csv_arrow(col_select =  c("siret", "siren", "trancheEffectifsEtablissement", "activitePrincipaleEtablissement", "codePostalEtablissement", "etatAdministratifEtablissement",
                                  "enseigne1Etablissement", "enseigne2Etablissement", "enseigne3Etablissement", "denominationUsuelleEtablissement"),
@@ -89,8 +112,6 @@ sirene <-
   filter((is.na(etatAdministratifEtablissement) | etatAdministratifEtablissement == "A") &
            trancheEffectifsEtablissement != "NN" &
            dep %in% c("75", "77", "78", "91", "92", "93", "94", "95")) %>%
-  inner_join(tranches_concernees, by = "trancheEffectifsEtablissement") %>%
-  inner_join(activites_industrielles, by = "activitePrincipaleEtablissement") %>%
   mutate(across(starts_with("enseigne"), ~if_else(is.na(.x),"",.x)),
          enseigneEtablissement = str_c(enseigne1Etablissement,
                                        enseigne2Etablissement,
@@ -106,7 +127,7 @@ production_dep <- function(depcode) {
     filter(dep == depcode) %>%
     select(-dep) %>%
     arrange(siret) %>%
-    write_csv_arrow(here("output", paste0("extraction_", depcode, ".csv")))
+    write_csv_arrow(here("output", paste0("extraction_etablissements", depcode, ".csv")))
 }
 
 production_dep("75")
