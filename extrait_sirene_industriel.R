@@ -82,6 +82,25 @@ sirene <-
          enseigneEtablissement = str_c(enseigne1Etablissement,
                                        enseigne2Etablissement,
                                        enseigne3Etablissement)) %>%
-  select(c(siret, siren, trancheEffectifsEtablissementLabel, activitePrincipaleEtablissementLabel,
+  select(c(dep, siret, siren, trancheEffectifsEtablissementLabel, activitePrincipaleEtablissementLabel,
            enseigneEtablissement, denominationUsuelleEtablissement)) %>%
   compute()
+
+production_dep <- function(depcode) {
+  dir.create(here("output"), showWarnings = FALSE)
+  
+  sirene %>%
+    filter(dep == depcode) %>%
+    select(-dep) %>%
+    arrange(siret) %>%
+    write_csv_arrow(here("output", paste0("extraction_", depcode, ".csv")))
+}
+
+production_dep("75")
+production_dep("77")
+production_dep("78")
+production_dep("91")
+production_dep("92")
+production_dep("93")
+production_dep("94")
+production_dep("95")
