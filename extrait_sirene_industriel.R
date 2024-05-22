@@ -95,17 +95,18 @@ tranches_effectifs <-
 
 sirene_ent <-
   here("input", "StockUniteLegale_utf8.csv") %>%
-  read_csv_arrow(col_select =  c("siren", "trancheEffectifsUniteLegale", "activitePrincipaleUniteLegale", "etatAdministratifUniteLegale"),
+  read_csv_arrow(col_select =  c("siren", "trancheEffectifsUniteLegale", "activitePrincipaleUniteLegale", "etatAdministratifUniteLegale", "denominationUniteLegale"),
                  col_types =  schema(siren = string(),
                                      trancheEffectifsUniteLegale = string(),
                                      activitePrincipaleUniteLegale = string(),
-                                     etatAdministratifUniteLegale = string()),
+                                     etatAdministratifUniteLegale = string(),
+                                     denominationUniteLegale = string()),
                  as_data_frame = FALSE) %>%
   filter((is.na(etatAdministratifUniteLegale) | etatAdministratifUniteLegale == "A") &
            trancheEffectifsUniteLegale %in% c("21", "22", "31", "32")) %>%
-  select(-etatAdministratifUniteLegale) %>%
   inner_join(tranches_effectifs %>% rename_with(~paste0(.x, "UniteLegale")), by = "trancheEffectifsUniteLegale") %>%
   inner_join(activites_industrielles  %>% rename_with(~paste0(.x, "UniteLegale")), by = "activitePrincipaleUniteLegale") %>%
+  select(siren, trancheEffectifsLabelUniteLegale, activitePrincipaleLabelUniteLegale, denominationUniteLegale) %>%
   compute()
 
 sirene_etab <-
