@@ -93,10 +93,37 @@ tranches_effectifs <-
     "53", "10 000 salariés et plus"
   )
 
+sirene_etab <-
+  here("input", "StockEtablissement_utf8.csv") %>%
+  read_csv_arrow(col_select =  c("siren", "nic", "trancheEffectifsEtablissement", "activitePrincipaleEtablissement", "codePostalEtablissement", "etatAdministratifEtablissement",
+                                 "enseigne1Etablissement", "enseigne2Etablissement", "enseigne3Etablissement", "denominationUsuelleEtablissement", "etablissementSiege"),
+                 col_types =  schema(siren = string(),
+                                     nic = string(),
+                                     trancheEffectifsEtablissement = string(),
+                                     activitePrincipaleEtablissement = string(),
+                                     codePostalEtablissement = string(),
+                                     etatAdministratifEtablissement = string(),
+                                     enseigne1Etablissement = string(),
+                                     enseigne2Etablissement = string(),
+                                     enseigne3Etablissement = string(),
+                                     denominationUsuelleEtablissement = string(),
+                                     etablissementSiege = boolean()),
+                 as_data_frame = FALSE) %>%
+  mutate(dep =  str_sub(codePostalEtablissement, 1L, 2L)) %>%
+  filter((is.na(etatAdministratifEtablissement) | etatAdministratifEtablissement == "A") &
+           ! trancheEffectifsEtablissement %in% c("NN", "00") &
+           dep %in% c("75", "77", "78", "91", "92", "93", "94", "95") &
+           etablissementSiege) %>%
+  inner_join(tranches_effectifs %>% rename_with(~paste0(.x, "Etablissement")), by = "trancheEffectifsEtablissement") %>%
+  distinct(dep, siren, nic, trancheEffectifsLabelEtablissement) %>%
+  rename(nicSiegeUniteLegale = nic, trancheEffectifsLabelSiegeUniteLegale = trancheEffectifsLabelEtablissement) %>%
+  compute()
+
 sirene_ent <-
   here("input", "StockUniteLegale_utf8.csv") %>%
-  read_csv_arrow(col_select =  c("siren", "trancheEffectifsUniteLegale", "activitePrincipaleUniteLegale", "etatAdministratifUniteLegale", "denominationUniteLegale"),
+  read_csv_arrow(col_select =  c("siren", "nicSiegeUniteLegale", "trancheEffectifsUniteLegale", "activitePrincipaleUniteLegale", "etatAdministratifUniteLegale", "denominationUniteLegale"),
                  col_types =  schema(siren = string(),
+                                     nicSiegeUniteLegale = string(),
                                      trancheEffectifsUniteLegale = string(),
                                      activitePrincipaleUniteLegale = string(),
                                      etatAdministratifUniteLegale = string(),
@@ -106,41 +133,13 @@ sirene_ent <-
            trancheEffectifsUniteLegale %in% c("21", "22", "31", "32")) %>%
   inner_join(tranches_effectifs %>% rename_with(~paste0(.x, "UniteLegale")), by = "trancheEffectifsUniteLegale") %>%
   inner_join(activites_industrielles  %>% rename_with(~paste0(.x, "UniteLegale")), by = "activitePrincipaleUniteLegale") %>%
-  select(siren, trancheEffectifsLabelUniteLegale, activitePrincipaleLabelUniteLegale, denominationUniteLegale) %>%
-  compute()
-
-sirene_etab <-
-  here("input", "StockEtablissement_utf8.csv") %>%
-  read_csv_arrow(col_select =  c("siret", "siren", "trancheEffectifsEtablissement", "activitePrincipaleEtablissement", "codePostalEtablissement", "etatAdministratifEtablissement",
-                                 "enseigne1Etablissement", "enseigne2Etablissement", "enseigne3Etablissement", "denominationUsuelleEtablissement"),
-                 col_types =  schema(siret = string(),
-                                     siren = string(),
-                                     trancheEffectifsEtablissement = string(),
-                                     activitePrincipaleEtablissement = string(),
-                                     codePostalEtablissement = string(),
-                                     etatAdministratifEtablissement = string(),
-                                     enseigne1Etablissement = string(),
-                                     enseigne2Etablissement = string(),
-                                     enseigne3Etablissement = string(),
-                                     denominationUsuelleEtablissement = string()),
-                 as_data_frame = FALSE) %>%
-  mutate(dep =  str_sub(codePostalEtablissement, 1L, 2L)) %>%
-  filter((is.na(etatAdministratifEtablissement) | etatAdministratifEtablissement == "A") &
-           ! trancheEffectifsEtablissement %in% c("NN", "00") &
-           dep %in% c("75", "77", "78", "91", "92", "93", "94", "95")) %>%
-  mutate(across(starts_with("enseigne"), ~if_else(is.na(.x),"",.x)),
-         enseigneEtablissement = str_c(enseigne1Etablissement,
-                                       enseigne2Etablissement,
-                                       enseigne3Etablissement)) %>%
-  inner_join(tranches_effectifs %>% rename_with(~paste0(.x, "Etablissement")), by = "trancheEffectifsEtablissement") %>%
-  inner_join(naf  %>% rename_with(~paste0(.x, "Etablissement")), by = "activitePrincipaleEtablissement") %>%
-  select(c(dep, siret, siren, trancheEffectifsLabelEtablissement, activitePrincipaleLabelEtablissement,
-           enseigneEtablissement, denominationUsuelleEtablissement)) %>%
+  select(siren, nicSiegeUniteLegale, trancheEffectifsLabelUniteLegale, activitePrincipaleLabelUniteLegale, denominationUniteLegale) %>%
   compute()
 
 sirene <-
-  sirene_etab %>%
-  inner_join(sirene_ent, by = "siren") %>%
+  sirene_ent %>%
+  inner_join(sirene_etab, by = c("siren", "nicSiegeUniteLegale")) %>%
+  relocate(siren, denominationUniteLegale, nicSiegeUniteLegale, trancheEffectifsLabelUniteLegale, trancheEffectifsLabelSiegeUniteLegale, activitePrincipaleLabelUniteLegale) %>%
   compute()
 
 production_dep <- function(depcode) {
@@ -149,7 +148,7 @@ production_dep <- function(depcode) {
   sirene %>%
     filter(dep == depcode) %>%
     select(-dep) %>%
-    arrange(siret) %>%
+    arrange(siren) %>%
     write_csv_arrow(here("output", paste0("extraction_", depcode, ".csv")))
 }
 
