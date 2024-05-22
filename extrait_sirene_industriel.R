@@ -1,6 +1,8 @@
 library(here)
 library(arrow)
 library(dplyr)
+library(readxl)
+library(stringr)
 
 etabs <- file.path(tempdir(),"StockEtablissement_utf8.zip")
 # Sirene stock etab (https://www.data.gouv.fr/fr/datasets/base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/)
@@ -10,6 +12,11 @@ download.file("https://www.data.gouv.fr/fr/datasets/r/0651fb76-bcf3-4f6a-a38d-bc
               quiet = TRUE)
 unzip(etabs,
       exdir = here("input"))
+
+download.file("https://www.insee.fr/fr/statistiques/fichier/2120875/naf2008_liste_n5.xls",
+              here("input", "naf2008_liste_n5.xls"),
+              method = "wget",
+              quiet = TRUE)
 
 activites_industrielles <-
   tribble(~activitePrincipaleEtablissement, ~activitePrincipaleEtablissementLabel,
@@ -46,6 +53,12 @@ activites_industrielles <-
           "25.61Z", "Traitement et revêtement des métaux",
           "10.83Z", "Transformation du thé et du café",
           "10.11Z", "Transformation et conservation de la viande de boucherie") %>%
+  union_all(here("input", "naf2008_liste_n5.xls") %>%
+              read_xls(skip = 2L) %>%
+              rename(activitePrincipaleEtablissement = Code,
+                     activitePrincipaleEtablissementLabel = Libellé) %>%
+              filter(str_sub(activitePrincipaleEtablissement, 1L, 2L) >= "10" &
+                       str_sub(activitePrincipaleEtablissement, 1L, 2L) <= "33")) %>%
   as_arrow_table()
 
 tranches_concernees <-
